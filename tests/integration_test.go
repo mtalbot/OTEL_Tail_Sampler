@@ -111,14 +111,14 @@ func TestFullSystemIntegration(t *testing.T) {
 	engine := decision.New(cfg.Decision, gsp, true)
 	rlp := rollup.New(cfg.Rollup)
 	mockExp := &MockExporter{}
-	proc := processor.New(buf, gsp, rlp, mockExp, true)
+	proc := processor.New(buf, gsp, rlp, mockExp, true, nil)
 
 	require.NoError(t, buf.Start(ctx))
 	require.NoError(t, gsp.Start(ctx))
 	proc.Start(ctx)
 
 	bridge := &consumerBridge{buffer: buf, decision: engine, wal: walLog}
-	rcv := receiver.New(cfg.Receiver, bridge, true)
+	rcv := receiver.New(cfg.Receiver, bridge, true, nil)
 	require.NoError(t, rcv.Start(ctx))
 	defer rcv.Stop()
 
