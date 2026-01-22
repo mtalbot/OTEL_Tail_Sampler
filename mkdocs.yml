@@ -1,6 +1,6 @@
 site_name: OTEL Tail Sampler
 site_description: High-performance, distributed tail sampling and cardinality control for OpenTelemetry.
-site_author: Mark James Talbot
+site_author: MarsLabs
 site_url: https://mtalbot.github.io/OTEL_Tail_Sampler
 
 theme:

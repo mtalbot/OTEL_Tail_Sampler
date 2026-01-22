@@ -1,5 +1,7 @@
 # OTEL Tail Sampler: Intelligent Observability at Scale
 
+**Developed by [MarsLabs](https://marslabs.example.com)**
+
 **The High-Performance, Distributed Solution for Tail Sampling and Cardinality Control.**
 
 In modern distributed systems, data volume is your greatest asset and your biggest liability. Traditional sampling drops the very traces you need most—the errors, the outliers, and the bottlenecks. 

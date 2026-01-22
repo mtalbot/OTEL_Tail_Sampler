@@ -1,0 +1,38 @@
+# Dual Licensing Agreement
+
+This software is dual-licensed to provide the benefits of Open Source to the community while supporting the continued development of the project through commercial licensing.
+
+---
+
+## 1. Open Source License (Non-Proprietary Use)
+
+For open-source and non-proprietary use, this software is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+### Key Terms:
+- **Copyleft:** If you modify the software, you must distribute your modifications under the same license.
+- **Remote Network Interaction:** If you run a modified version of this software and allow users to interact with it over a network (e.g., as a service), you must make the source code of that version available.
+- **Commercial Usage:** While AGPL allows commercial usage, users must comply with the strict copyleft and network interaction clauses, which often require open-sourcing the surrounding infrastructure.
+
+The full text of the AGPL-3.0 can be found at:
+https://www.gnu.org/licenses/agpl-3.0.en.html
+
+---
+
+## 2. Commercial Limited Site License
+
+For organizations that wish to use this software in a proprietary environment or avoid the requirements of the AGPL-3.0, we offer a **Commercial Limited Site License**.
+
+### Benefits:
+- **Proprietary Use:** Use the software without the obligation to disclose your source code or infrastructure changes.
+- **Deployment Flexibility:** Permission to use the software for commercial gain within your organization.
+- **Support & Indemnity:** Access to enterprise-grade support and legal protections not included in the AGPL version.
+
+To obtain a commercial license, please contact our sales team at:
+[sales@marslabs.co.uk](mailto:sales@marslabs.co.uk)
+
+
+
+---
+
+## Summary
+By using this software, you agree to abide by the terms of either the AGPL-3.0 or the Commercial license as applicable to your use case.
