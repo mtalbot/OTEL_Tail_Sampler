@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"log"
+	"sync"
 	"time"
 
 	"OTEL_Tail_Sampler/internal/buffer"
@@ -29,6 +30,11 @@ type Processor struct {
 	rollup   *rollup.Processor
 	exporter Exporter
 	debug    bool
+
+	// Temporary storage for signals evicted from buffer waiting for rollup
+	evictedMetrics []*signals.MetricSignal
+	evictedLogs    []*signals.LogSignal
+	evictedMu      sync.Mutex
 }
 
 func New(buf buffer.Manager, gsp *gossip.Manager, rlp *rollup.Processor, exp Exporter, debug bool) *Processor {
@@ -38,6 +44,8 @@ func New(buf buffer.Manager, gsp *gossip.Manager, rlp *rollup.Processor, exp Exp
 		rollup:   rlp,
 		exporter: exp,
 		debug:    debug,
+		evictedMetrics: make([]*signals.MetricSignal, 0),
+		evictedLogs:    make([]*signals.LogSignal, 0),
 	}
 }
 
@@ -51,6 +59,32 @@ func (p *Processor) Start(ctx context.Context) {
 	p.log("Starting processor loops")
 	go p.decisionLoop(ctx)
 	go p.rollupLoop(ctx)
+	go p.triggerLoop(ctx)
+	go p.evictionConsumerLoop(ctx)
+}
+
+func (p *Processor) evictionConsumerLoop(ctx context.Context) {
+	ch := p.buffer.GetEvictedSignals()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case sig := <-ch:
+			p.handleEvictedSignal(sig)
+		}
+	}
+}
+
+func (p *Processor) handleEvictedSignal(sig signals.Signal) {
+	p.evictedMu.Lock()
+	defer p.evictedMu.Unlock()
+
+	switch s := sig.(type) {
+	case *signals.MetricSignal:
+		p.evictedMetrics = append(p.evictedMetrics, s)
+	case *signals.LogSignal:
+		p.evictedLogs = append(p.evictedLogs, s)
+	}
 }
 
 func (p *Processor) decisionLoop(ctx context.Context) {
@@ -62,6 +96,32 @@ func (p *Processor) decisionLoop(ctx context.Context) {
 		case d := <-ch:
 			p.log("Received sampling decision for trace %s", d.TraceID)
 			p.processDecision(d)
+		}
+	}
+}
+
+func (p *Processor) triggerLoop(ctx context.Context) {
+	ch := p.gossip.GetTriggerChannel()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case t := <-ch:
+			p.processTrigger(t)
+		}
+	}
+}
+
+func (p *Processor) processTrigger(t gossip.TriggerEvent) {
+	p.log("Processing trigger %s (Value: %f)", t.Name, t.Value)
+	
+	if t.Name == "high_load" {
+		if t.Value > t.Threshold {
+			p.log("High load detected, switching to COARSE rollups")
+			p.rollup.SetLevel(rollup.LevelCoarse)
+		} else {
+			p.log("Load normalized, switching back to FINE rollups")
+			p.rollup.SetLevel(rollup.LevelFine)
 		}
 	}
 }
@@ -149,24 +209,35 @@ func (p *Processor) rollupLoop(ctx context.Context) {
 }
 
 func (p *Processor) performRollup() {
-	// Everything in buffer currently is "unsampled" (or hasn't been removed by a decision yet)
-	// We use a very wide range to fetch everything up to "now - safe margin"
+	// 1. Fetch remaining unsampled data from buffer
 	end := time.Now().Add(-10 * time.Second)
 	start := time.Time{}
 
-	metrics := p.buffer.GetMetricsInRange(start, end)
-	if len(metrics) > 0 {
-		p.log("Rolling up %d metrics", len(metrics))
-		rolled := p.rollup.RollupMetrics(metrics)
+	bufferMetrics := p.buffer.GetMetricsInRange(start, end)
+	bufferLogs := p.buffer.GetLogsInRange(start, end)
+
+	// 2. Combine with auto-evicted data captured since last rollup
+	p.evictedMu.Lock()
+	allMetrics := append(bufferMetrics, p.evictedMetrics...)
+	p.evictedMetrics = make([]*signals.MetricSignal, 0)
+	
+	allLogs := append(bufferLogs, p.evictedLogs...)
+	p.evictedLogs = make([]*signals.LogSignal, 0)
+	p.evictedMu.Unlock()
+
+	// 3. Process Metrics
+	if len(allMetrics) > 0 {
+		p.log("Rolling up %d metrics (Buffer: %d, Evicted: %d)", len(allMetrics), len(bufferMetrics), len(allMetrics)-len(bufferMetrics))
+		rolled := p.rollup.RollupMetrics(allMetrics)
 		p.addProcessingLabelToMetrics(rolled)
 		p.exporter.ExportMetrics(rolled)
 		p.buffer.RemoveMetricsInRange(start, end)
 	}
 
-	logs := p.buffer.GetLogsInRange(start, end)
-	if len(logs) > 0 {
-		p.log("Rolling up %d logs", len(logs))
-		rolled := p.rollup.RollupLogs(logs)
+	// 4. Process Logs
+	if len(allLogs) > 0 {
+		p.log("Rolling up %d logs (Buffer: %d, Evicted: %d)", len(allLogs), len(bufferLogs), len(allLogs)-len(bufferLogs))
+		rolled := p.rollup.RollupLogs(allLogs)
 		p.addProcessingLabelToLogs(rolled)
 		p.exporter.ExportLogs(rolled)
 		p.buffer.RemoveLogsInRange(start, end)

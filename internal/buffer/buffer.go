@@ -46,6 +46,9 @@ type Manager interface {
 	RemoveMetricsInRange(start, end time.Time)
 	RemoveLogsInRange(start, end time.Time)
 	
+	// Stream for evicted signals (rollups)
+	GetEvictedSignals() <-chan signals.Signal
+
 	ClearMetrics()
 	ClearLogs()
 }
@@ -78,11 +81,14 @@ type InMemoryBuffer struct {
 	mu    sync.RWMutex
 	debug bool
 
-	// Indices for time-range lookups (O(log N))
+	// Stream for evicted signals
+	evictedChan chan signals.Signal
+
+	// Indices for time-range lookups
 	metricTimeIndex *btree.BTree
 	logTimeIndex    *btree.BTree
 
-	// Lookup by Key for efficient removal (O(1))
+	// Lookup by Key for efficient removal
 	metricKeyMap map[string]int64
 	logKeyMap    map[string]int64
 	
@@ -101,6 +107,7 @@ func New(cfg config.BufferConfig, debug bool) *InMemoryBuffer {
 	b := &InMemoryBuffer{
 		cfg:             cfg,
 		debug:           debug,
+		evictedChan:     make(chan signals.Signal, 1000),
 		metricTimeIndex: btree.New(32),
 		logTimeIndex:    btree.New(32),
 		metricKeyMap:    make(map[string]int64),
@@ -108,7 +115,6 @@ func New(cfg config.BufferConfig, debug bool) *InMemoryBuffer {
 		stopChan:        make(chan struct{}),
 	}
 
-	// Initialize BigCache with Eviction Hook
 	cacheConfig := bigcache.DefaultConfig(time.Duration(cfg.TTLSeconds) * time.Second)
 	cacheConfig.CleanWindow = 1 * time.Second
 	cacheConfig.HardMaxCacheSize = cfg.Size
@@ -116,8 +122,8 @@ func New(cfg config.BufferConfig, debug bool) *InMemoryBuffer {
 		cacheConfig.HardMaxCacheSize = 512
 	}
 
-	// Automatic Index Cleanup Hook
-	cacheConfig.OnRemove = b.onCacheEviction
+	// Use OnRemoveWithReason to distinguish between explicit deletion and eviction
+	cacheConfig.OnRemoveWithReason = b.onCacheEvictionWithReason
 
 	cache, err := bigcache.New(context.Background(), cacheConfig)
 	if err != nil {
@@ -128,29 +134,62 @@ func New(cfg config.BufferConfig, debug bool) *InMemoryBuffer {
 	return b
 }
 
+func (b *InMemoryBuffer) GetEvictedSignals() <-chan signals.Signal {
+	return b.evictedChan
+}
+
 func (b *InMemoryBuffer) log(format string, v ...interface{}) {
 	if b.debug {
 		log.Printf("[BUFFER] "+format, v...)
 	}
 }
 
-// onCacheEviction is called by BigCache when an item is removed (expired, no space, or deleted)
-func (b *InMemoryBuffer) onCacheEviction(key string, entry []byte) {
+func (b *InMemoryBuffer) onCacheEvictionWithReason(key string, entry []byte, reason bigcache.RemoveReason) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if strings.HasPrefix(key, "m_") {
+	isMetric := strings.HasPrefix(key, "m_")
+	isLog := strings.HasPrefix(key, "l_")
+
+	// 1. Cleanup Index
+	if isMetric {
 		if ts, ok := b.metricKeyMap[key]; ok {
 			b.metricTimeIndex.Delete(&TimeKey{Timestamp: ts, Key: key})
 			delete(b.metricKeyMap, key)
-			b.log("Evicted metric index for key %s", key)
 		}
-	} else if strings.HasPrefix(key, "l_") {
+	} else if isLog {
 		if ts, ok := b.logKeyMap[key]; ok {
 			b.logTimeIndex.Delete(&TimeKey{Timestamp: ts, Key: key})
 			delete(b.logKeyMap, key)
-			b.log("Evicted log index for key %s", key)
 		}
+	}
+
+	// 2. If it was an eviction (Expired or NoSpace), send for aggregation
+	if reason == bigcache.Expired || reason == bigcache.NoSpace {
+		var sig signals.Signal
+		if isMetric {
+			m, err := b.metricUnmarshaler.UnmarshalMetrics(entry)
+			if err == nil {
+				sig = &signals.MetricSignal{Metrics: m, Ctx: signals.Context{ReceivedAt: time.Now()}}
+			}
+		} else if isLog {
+			l, err := b.logUnmarshaler.UnmarshalLogs(entry)
+			if err == nil {
+				sig = &signals.LogSignal{Logs: l, Ctx: signals.Context{ReceivedAt: time.Now()}}
+			}
+		}
+
+		if sig != nil {
+			select {
+			case b.evictedChan <- sig:
+			default:
+				// Channel full, drop to prevent blocking cache operations
+			}
+		}
+	}
+	
+	if reason != bigcache.Deleted {
+		b.log("Auto-evicted key %s (Reason: %d)", key, reason)
 	}
 }
 
@@ -165,7 +204,6 @@ func (b *InMemoryBuffer) Stop() {
 }
 
 func (b *InMemoryBuffer) Store(sig signals.Signal) error {
-	// Storage methods handle their own locking for index updates
 	switch s := sig.(type) {
 	case *signals.TraceSignal:
 		return b.storeTraces(s)
@@ -214,8 +252,7 @@ func (b *InMemoryBuffer) storeTraces(sig *signals.TraceSignal) error {
 		var stored StoredTraceData
 		entry, err := b.cache.Get(key)
 		if err == nil {
-			dec := gob.NewDecoder(bytes.NewReader(entry))
-			dec.Decode(&stored)
+			gob.NewDecoder(bytes.NewReader(entry)).Decode(&stored)
 		} else {
 			stored = StoredTraceData{ReceivedAt: time.Now().UnixNano()}
 		}
@@ -378,7 +415,7 @@ func (b *InMemoryBuffer) GetTraceCount() int {
 
 func (b *InMemoryBuffer) RemoveTrace(traceID pcommon.TraceID) {
 	key := hex.EncodeToString(traceID[:])
-	b.cache.Delete(key) // This triggers onCacheEviction hook
+	b.cache.Delete(key) 
 }
 
 func (b *InMemoryBuffer) GetMetricsInRange(start, end time.Time) []*signals.MetricSignal {
