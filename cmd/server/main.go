@@ -24,7 +24,39 @@ import (
 )
 
 // mainConsumer bridges the receiver and the rest of the system
-...
+type mainConsumer struct {
+	buffer   buffer.Manager
+	decision *decision.Engine
+	wal      *wal.Log
+	debug    bool
+}
+
+func (c *mainConsumer) Consume(sig signals.Signal) error {
+	if c.debug {
+		log.Printf("[CONSUMER] Received signal of type %v", sig.Type())
+	}
+	// 1. Write to WAL first for durability
+	if c.wal != nil {
+		if err := c.wal.Write(sig); err != nil {
+			log.Printf("Failed to write to WAL: %v", err)
+			return err
+		}
+	}
+
+	// 2. Store in buffer
+	if err := c.buffer.Store(sig); err != nil {
+		log.Printf("Failed to store signal: %v", err)
+		return err
+	}
+
+	// 3. If it's a trace, evaluate for immediate sampling decision
+	if ts, ok := sig.(*signals.TraceSignal); ok {
+		c.decision.EvaluateTrace(ts)
+	}
+
+	return nil
+}
+
 func main() {
 	// 1. Load Configuration
 	cfg := config.DefaultConfig()
