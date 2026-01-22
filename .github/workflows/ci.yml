@@ -23,11 +23,31 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Build
-        run: CGO_ENABLED=0 go build -v ./...
-
-      - name: Run Tests
+      - name: Run Unit Tests
         run: CGO_ENABLED=0 go test -v ./...
+
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: otel-test
+          # We create the cluster here instead of in the script so we can use the action's setup
+          # But our script expects to create it. We should modify the script or just install kind tool.
+          install_only: true
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Run Integration Test
+        run: ./integration/run_integration_test.sh
+
+      - name: Upload Test Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: |
+            integration/*.log
+            integration/test-report.md
 
   docker:
     name: Docker Build Check
