@@ -1,0 +1,48 @@
+site_name: OTEL Tail Sampler
+site_description: High-performance, distributed tail sampling and cardinality control for OpenTelemetry.
+site_author: Mark James Talbot
+site_url: https://mtalbot.github.io/OTEL_Tail_Sampler
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Marketing:
+      - Value Proposition: marketing/value-proposition.md
+  - Technical Docs:
+      - Architecture: architecture/overview.md
+      - Configuration: configuration/reference.md
+  - Getting Started:
+      - Quickstart: getting-started/quickstart.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - tables

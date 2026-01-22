@@ -14,6 +14,7 @@
 - Each feature should have acceptance tests
 - Any bug should have a regression test before fixing
 - Always think first, create a user story in a markdown doc, in a folder called stories, ask for my consent and then perform the story
+- Before committing anything always fully execute the build and tests
 
 ## Coding Style
 - Use tabs for whitespace sepertation

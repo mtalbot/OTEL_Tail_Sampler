@@ -143,6 +143,43 @@ func main() {
 	proc := processor.New(buf, gsp, rlp, exp, cfg.Debug)
 	proc.Start(ctx)
 
+	// Load Monitoring Loop
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		
+		// For prototype: monitor buffer saturation
+		threshold := float64(cfg.Buffer.MaxTraces) * 0.8
+		highLoadActive := false
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				count := buf.GetTraceCount()
+
+				if float64(count) > threshold && !highLoadActive {
+					gsp.BroadcastTrigger(gossip.TriggerEvent{
+						Name:      "high_load",
+						Value:     float64(count),
+						Threshold: threshold,
+						StartedAt: time.Now(),
+					})
+					highLoadActive = true
+				} else if float64(count) <= threshold && highLoadActive {
+					gsp.BroadcastTrigger(gossip.TriggerEvent{
+						Name:      "high_load",
+						Value:     float64(count),
+						Threshold: threshold,
+						StartedAt: time.Now(),
+					})
+					highLoadActive = false
+				}
+			}
+		}
+	}()
+
 	// WAL Truncation Loop
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)

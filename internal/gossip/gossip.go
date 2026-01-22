@@ -26,6 +26,7 @@ type Manager struct {
 	
 	broadcasts   *memberlist.TransmitLimitedQueue
 	decisionChan chan SamplingDecision
+	triggerChan  chan TriggerEvent
 }
 
 // New creates a new Gossip Manager
@@ -36,6 +37,7 @@ func New(cfg config.GossipConfig, discoverer discovery.Discoverer, debug bool) *
 		debug:        debug,
 		events:       make(chan memberlist.NodeEvent, 16),
 		decisionChan: make(chan SamplingDecision, 100),
+		triggerChan:  make(chan TriggerEvent, 100),
 	}
 }
 
@@ -88,6 +90,10 @@ func (m *Manager) GetDecisionChannel() <-chan SamplingDecision {
 	return m.decisionChan
 }
 
+func (m *Manager) GetTriggerChannel() <-chan TriggerEvent {
+	return m.triggerChan
+}
+
 func (m *Manager) BroadcastDecision(decision SamplingDecision) error {
 	m.log("Broadcasting decision for trace %s", decision.TraceID)
 	// Convert to PB
@@ -120,6 +126,39 @@ func (m *Manager) BroadcastDecision(decision SamplingDecision) error {
 	case m.decisionChan <- decision:
 	default:
 		log.Printf("Decision channel full, dropping local message for %s", decision.TraceID)
+	}
+
+	return nil
+}
+
+func (m *Manager) BroadcastTrigger(trigger TriggerEvent) error {
+	m.log("Broadcasting trigger event %s", trigger.Name)
+	pbMsg := &pb.GossipMessage{
+		Payload: &pb.GossipMessage_TriggerEvent{
+			TriggerEvent: &pb.TriggerEvent{
+				Name:      trigger.Name,
+				Value:     trigger.Value,
+				Threshold: trigger.Threshold,
+				StartedAt: timestamppb.New(trigger.StartedAt),
+			},
+		},
+	}
+
+	data, err := proto.Marshal(pbMsg)
+	if err != nil {
+		return err
+	}
+
+	m.broadcasts.QueueBroadcast(&broadcast{
+		msg:    data,
+		notify: nil,
+	})
+
+	// Also deliver locally
+	select {
+	case m.triggerChan <- trigger:
+	default:
+		log.Printf("Trigger channel full, dropping local message for %s", trigger.Name)
 	}
 
 	return nil
@@ -164,7 +203,19 @@ func (m *Manager) NotifyMsg(b []byte) {
 		}
 	
 	case *pb.GossipMessage_TriggerEvent:
-		m.log("Received TriggerEvent (not implemented)")
+		te := payload.TriggerEvent
+		trigger := TriggerEvent{
+			Name:      te.Name,
+			Value:     te.Value,
+			Threshold: te.Threshold,
+			StartedAt: te.StartedAt.AsTime(),
+		}
+		m.log("Received trigger event %s", trigger.Name)
+		select {
+		case m.triggerChan <- trigger:
+		default:
+			log.Printf("Trigger channel full, dropping message for %s", trigger.Name)
+		}
 	default:
 		log.Printf("Unknown message payload type")
 	}
