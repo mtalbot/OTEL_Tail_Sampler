@@ -16,8 +16,8 @@ COPY . .
 # Build statically linked binary
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o otel-sampler ./cmd/server
 
-# Create data directory for WAL
-RUN mkdir -p /app/data/wal
+# Create data directory for WAL and set permissions
+RUN mkdir -p /app/data/wal && chmod -R 777 /app/data
 
 # Stage 2: Final Image
 FROM gcr.io/distroless/static-debian12
