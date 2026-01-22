@@ -1,0 +1,66 @@
+replicaCount: 1
+
+image:
+  repository: otel-sampler
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+config:
+  debug: true
+  receiver:
+    grpc_port: 4317
+    host: "0.0.0.0"
+  buffer:
+    size: 512
+    ttl_seconds: 30
+    max_traces: 5000
+  discovery:
+    type: "static"
+    peers: []
+  gossip:
+    port: 7946
+    bind_addr: "0.0.0.0"
+    interval: 100
+  decision:
+    policies:
+      - name: "sample-all"
+        type: "latency"
+        latency_threshold_ms: -1
+  rollup:
+    enabled: true
+  exporter:
+    endpoint: "otel-collector:4317"
+    insecure: true
+
+# Extra environment variables
+env: []
+# - name: EXPORTER_ENDPOINT
+#   value: "custom-endpoint:4317"
+
+service:
+  type: ClusterIP
+  ports:
+    otlp: 4317
+    gossip: 7946
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+resources: {}
+  # limits:
+  #   cpu: 500m
+  #   memory: 1Gi
+  # requests:
+  #   cpu: 100m
+  #   memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

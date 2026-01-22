@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "otel-tail-sampler.fullname" . }}
+  labels:
+    {{- include "otel-tail-sampler.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.ports.otlp }}
+      targetPort: otlp
+      protocol: TCP
+      name: otlp
+    - port: {{ .Values.service.ports.gossip }}
+      targetPort: gossip
+      protocol: TCP
+      name: gossip
+  selector:
+    {{- include "otel-tail-sampler.selectorLabels" . | nindent 4 }}

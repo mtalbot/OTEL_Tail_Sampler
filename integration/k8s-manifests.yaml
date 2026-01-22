@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+      - name: collector
+        image: otel/opentelemetry-collector-contrib:latest
+        command:
+        - "/otelcol-contrib"
+        - "--config=/etc/otelcol/otel-collector-config.yaml"
+        ports:
+        - containerPort: 4317
+        - containerPort: 5317
+        volumeMounts:
+        - name: otel-collector-config-vol
+          mountPath: /etc/otelcol
+      volumes:
+      - name: otel-collector-config-vol
+        configMap:
+          name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-service
+spec:
+  selector:
+    app: otel-collector
+  ports:
+  - name: ingress
+    port: 4317
+    targetPort: 4317
+  - name: egress
+    port: 5317
+    targetPort: 5317
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telemetry-gen-traces
+spec:
+  template:
+    spec:
+      containers:
+      - name: gen
+        image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+        args:
+        - traces
+        - --otlp-endpoint=otel-collector-service:4317
+        - --otlp-insecure
+        - --rate=10
+        - --duration=30s
+      restartPolicy: Never
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telemetry-gen-metrics
+spec:
+  template:
+    spec:
+      containers:
+      - name: gen
+        image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+        args:
+        - metrics
+        - --otlp-endpoint=otel-collector-service:4317
+        - --otlp-insecure
+        - --rate=10
+        - --duration=30s
+      restartPolicy: Never
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telemetry-gen-logs
+spec:
+  template:
+    spec:
+      containers:
+      - name: gen
+        image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest
+        args:
+        - logs
+        - --otlp-endpoint=otel-collector-service:4317
+        - --otlp-insecure
+        - --rate=10
+        - --duration=30s
+      restartPolicy: Never

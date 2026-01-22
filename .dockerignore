@@ -1,0 +1,6 @@
+.git
+.gemini
+bin
+otel-sampler
+*.exe
+vendor

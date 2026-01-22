@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package gossip;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "OTEL_Tail_Sampler/internal/gossip/pb";
+
+message SamplingDecision {
+  string trace_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp decided_at = 3;
+  string decided_by = 4;
+  google.protobuf.Timestamp event_start = 5;
+  google.protobuf.Timestamp event_end = 6;
+}
+
+message TriggerEvent {
+  string name = 1;
+  double value = 2;
+  double threshold = 3;
+  google.protobuf.Timestamp started_at = 4;
+}
+
+message GossipMessage {
+  oneof payload {
+    SamplingDecision sampling_decision = 1;
+    TriggerEvent trigger_event = 2;
+  }
+}

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "otel-tail-sampler.fullname" . }}-config
+  labels:
+    {{- include "otel-tail-sampler.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    debug: {{ .Values.config.debug }}
+    receiver:
+      grpc_port: {{ .Values.config.receiver.grpc_port }}
+      host: {{ .Values.config.receiver.host | quote }}
+    buffer:
+      size: {{ .Values.config.buffer.size }}
+      ttl_seconds: {{ .Values.config.buffer.ttl_seconds }}
+      max_traces: {{ .Values.config.buffer.max_traces }}
+    discovery:
+      type: {{ .Values.config.discovery.type | quote }}
+      peers: {{ .Values.config.discovery.peers | toJson }}
+    gossip:
+      port: {{ .Values.config.gossip.port }}
+      bind_addr: {{ .Values.config.gossip.bind_addr | quote }}
+      interval: {{ .Values.config.gossip.interval }}
+    decision:
+      policies:
+        {{- .Values.config.decision.policies | toJson | nindent 8 }}
+    rollup:
+      enabled: {{ .Values.config.rollup.enabled }}
+    exporter:
+      endpoint: {{ .Values.config.exporter.endpoint | quote }}
+      insecure: {{ .Values.config.exporter.insecure }}

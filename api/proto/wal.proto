@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package wal;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "OTEL_Tail_Sampler/internal/wal/pb";
+
+message WALRecord {
+  enum Type {
+    TRACE = 0;
+    METRIC = 1;
+    LOG = 2;
+  }
+  Type type = 1;
+  bytes data = 2; // Serialized pdata
+  google.protobuf.Timestamp timestamp = 3;
+}
