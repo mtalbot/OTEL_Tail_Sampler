@@ -64,11 +64,11 @@ A service to collect, buffer, and then either tail sample or provide rollups. Su
     - [x] Wire Buffer Manager to flush/drop based on decisions.
 
 ### Phase 5: Rollups & Cardinality Control
-- [ ] **Rollup Processor**
-    - [ ] Implement Metric aggregation logic (sum, count, histogram buckets).
-    - [ ] Implement Log pattern recognition/grouping (remove dynamic values).
-- [ ] **Dynamic Control**
-    - [ ] Connect Decision Engine to Rollup Processor (e.g., "High Load" trigger -> "Aggressive Rollup").
+- [x] **Rollup Processor**
+    - [x] Implement Metric aggregation logic (sum, count, histogram buckets).
+    - [x] Implement Log pattern recognition/grouping (remove dynamic values).
+- [x] **Dynamic Control**
+    - [x] Connect Decision Engine to Rollup Processor (e.g., "High Load" trigger -> "Aggressive Rollup").
 
 ### Phase 6: Export & Reliability
 - [x] **OTLP Exporter**
