@@ -79,6 +79,10 @@ $(if ($reduction -ge 0) { "The sampler successfully processed and routed data vi
     Write-Host "Estimated Reduction: $reduction %" -ForegroundColor Cyan
 }
 finally {
-    Write-Host "`nCleaning up Kind cluster..." -ForegroundColor Gray
+    Write-Host "`nSaving logs for triage..." -ForegroundColor Gray
+    kubectl logs -l app.kubernetes.io/name=otel-tail-sampler --tail=-1 | Out-File -FilePath "integration/sampler.log" -Encoding utf8
+    kubectl logs -l app=otel-collector --tail=-1 | Out-File -FilePath "integration/collector.log" -Encoding utf8
+
+    Write-Host "Cleaning up Kind cluster..." -ForegroundColor Gray
     kind delete cluster --name otel-test
 }

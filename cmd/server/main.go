@@ -17,9 +17,11 @@ import (
 	"OTEL_Tail_Sampler/internal/processor"
 	"OTEL_Tail_Sampler/internal/receiver"
 	"OTEL_Tail_Sampler/internal/rollup"
+	"OTEL_Tail_Sampler/internal/telemetry"
 	"OTEL_Tail_Sampler/internal/wal"
 	"OTEL_Tail_Sampler/pkg/signals"
 
+	"go.opentelemetry.io/otel/metric"
 	"gopkg.in/yaml.v3"
 )
 
@@ -90,6 +92,16 @@ func main() {
 
 	// 2. Initialize Components
 	
+	// Telemetry
+	tel, telShutdown, err := telemetry.Init(ctx, cfg.Exporter)
+	if err != nil {
+		log.Printf("Failed to initialize telemetry: %v", err)
+		// Proceed without telemetry? Or fail?
+		// For now, proceed, tel will be partially nil or we handle nil checks
+	} else {
+		defer telShutdown()
+	}
+
 	// WAL
 	walLog, err := wal.Open("./data/wal")
 	if err != nil {
@@ -133,6 +145,18 @@ func main() {
 	}
 	defer gsp.Stop()
 
+	// Register Gauges
+	if tel != nil {
+		tel.RegisterBufferGauge(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(int64(buf.GetTraceCount()))
+			return nil
+		})
+		tel.RegisterGossipGauge(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(int64(len(gsp.Members())))
+			return nil
+		})
+	}
+
 	// Decision Engine
 	engine := decision.New(cfg.Decision, gsp, cfg.Debug)
 
@@ -140,7 +164,7 @@ func main() {
 	rlp := rollup.New(cfg.Rollup)
 
 	// Main Processor (Handles decisions and periodic rollups)
-	proc := processor.New(buf, gsp, rlp, exp, cfg.Debug)
+	proc := processor.New(buf, gsp, rlp, exp, cfg.Debug, tel)
 	proc.Start(ctx)
 
 	// Load Monitoring Loop
@@ -205,7 +229,7 @@ func main() {
 		wal:      walLog,
 		debug:    cfg.Debug,
 	}
-	rcv := receiver.New(cfg.Receiver, consumer, cfg.Debug)
+	rcv := receiver.New(cfg.Receiver, consumer, cfg.Debug, tel)
 	if err := rcv.Start(ctx); err != nil {
 		log.Fatalf("Failed to start receiver: %v", err)
 	}
