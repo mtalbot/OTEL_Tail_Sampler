@@ -7,6 +7,10 @@ export PATH=$PATH:$HOME/go/bin
 
 # Cleanup function
 cleanup() {
+    echo "Saving logs for triage..."
+    kubectl logs -l app.kubernetes.io/name=otel-tail-sampler --tail=-1 > integration/sampler.log 2>&1 || true
+    kubectl logs -l app=otel-collector --tail=-1 > integration/collector.log 2>&1 || true
+    
     echo "Cleaning up Kind cluster..."
     kind delete cluster --name otel-test || true
 }
@@ -17,8 +21,12 @@ trap cleanup EXIT
 echo "Building Sampler Docker Image..."
 docker build -t otel-sampler:latest .
 
-echo "Creating Kind Cluster..."
-kind create cluster --name otel-test
+if ! kind get clusters | grep -q "otel-test"; then
+    echo "Creating Kind Cluster..."
+    kind create cluster --name otel-test
+else
+    echo "Cluster otel-test already exists."
+fi
 
 echo "Loading Image into Kind..."
 kind load docker-image otel-sampler:latest --name otel-test

@@ -17,7 +17,7 @@ data:
 
     exporters:
       otlp/sampler:
-        endpoint: sampler-service:4317
+        endpoint: integration-test-otel-tail-sampler:4317
         tls:
           insecure: true
       debug:

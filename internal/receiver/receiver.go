@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"OTEL_Tail_Sampler/internal/config"
+	"OTEL_Tail_Sampler/internal/telemetry"
 	"OTEL_Tail_Sampler/pkg/signals"
 
 	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
@@ -27,6 +28,7 @@ type Receiver struct {
 	consumer   Consumer
 	grpcServer *grpc.Server
 	debug      bool
+	telemetry  *telemetry.Telemetry
 	
 	// Implementations of the gRPC services
 	traceServer  *traceReceiver
@@ -35,11 +37,12 @@ type Receiver struct {
 }
 
 // New creates a new Receiver
-func New(cfg config.ReceiverConfig, consumer Consumer, debug bool) *Receiver {
+func New(cfg config.ReceiverConfig, consumer Consumer, debug bool, tel *telemetry.Telemetry) *Receiver {
 	return &Receiver{
-		cfg:      cfg,
-		consumer: consumer,
-		debug:    debug,
+		cfg:       cfg,
+		consumer:  consumer,
+		debug:     debug,
+		telemetry: tel,
 	}
 }
 
@@ -96,6 +99,9 @@ type traceReceiver struct {
 func (tr *traceReceiver) Export(ctx context.Context, req ptraceotlp.ExportRequest) (ptraceotlp.ExportResponse, error) {
 	traces := req.Traces()
 	tr.parent.log("Received trace batch: %d spans", traces.SpanCount())
+	if tr.parent.telemetry != nil {
+		tr.parent.telemetry.SignalsReceived.Add(ctx, 1)
+	}
 	// Create internal signal
 	sig := &signals.TraceSignal{
 		Traces: traces,
@@ -120,6 +126,9 @@ type metricReceiver struct {
 func (mr *metricReceiver) Export(ctx context.Context, req pmetricotlp.ExportRequest) (pmetricotlp.ExportResponse, error) {
 	metrics := req.Metrics()
 	mr.parent.log("Received metric batch: %d data points", metrics.DataPointCount())
+	if mr.parent.telemetry != nil {
+		mr.parent.telemetry.SignalsReceived.Add(ctx, 1)
+	}
 	sig := &signals.MetricSignal{
 		Metrics: metrics,
 		Ctx: signals.Context{
@@ -142,6 +151,9 @@ type logReceiver struct {
 func (lr *logReceiver) Export(ctx context.Context, req plogotlp.ExportRequest) (plogotlp.ExportResponse, error) {
 	logs := req.Logs()
 	lr.parent.log("Received log batch: %d records", logs.LogRecordCount())
+	if lr.parent.telemetry != nil {
+		lr.parent.telemetry.SignalsReceived.Add(ctx, 1)
+	}
 	sig := &signals.LogSignal{
 		Logs: logs,
 		Ctx: signals.Context{

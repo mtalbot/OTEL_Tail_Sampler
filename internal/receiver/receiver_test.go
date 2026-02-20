@@ -48,7 +48,7 @@ func TestReceiver_Trace(t *testing.T) {
 		Done:     make(chan struct{}, 1),
 	}
 
-	rcv := New(cfg, mockConsumer, true)
+	rcv := New(cfg, mockConsumer, true, nil)
 	err = rcv.Start(context.Background())
 	require.NoError(t, err)
 	defer rcv.Stop()

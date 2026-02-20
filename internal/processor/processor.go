@@ -10,6 +10,7 @@ import (
 	"OTEL_Tail_Sampler/internal/buffer"
 	"OTEL_Tail_Sampler/internal/gossip"
 	"OTEL_Tail_Sampler/internal/rollup"
+	"OTEL_Tail_Sampler/internal/telemetry"
 	"OTEL_Tail_Sampler/pkg/signals"
 
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -30,6 +31,7 @@ type Processor struct {
 	rollup   *rollup.Processor
 	exporter Exporter
 	debug    bool
+	telemetry *telemetry.Telemetry
 
 	// Temporary storage for signals evicted from buffer waiting for rollup
 	evictedMetrics []*signals.MetricSignal
@@ -37,13 +39,14 @@ type Processor struct {
 	evictedMu      sync.Mutex
 }
 
-func New(buf buffer.Manager, gsp *gossip.Manager, rlp *rollup.Processor, exp Exporter, debug bool) *Processor {
+func New(buf buffer.Manager, gsp *gossip.Manager, rlp *rollup.Processor, exp Exporter, debug bool, tel *telemetry.Telemetry) *Processor {
 	return &Processor{
 		buffer:   buf,
 		gossip:   gsp,
 		rollup:   rlp,
 		exporter: exp,
 		debug:    debug,
+		telemetry: tel,
 		evictedMetrics: make([]*signals.MetricSignal, 0),
 		evictedLogs:    make([]*signals.LogSignal, 0),
 	}
@@ -141,6 +144,9 @@ func (p *Processor) processDecision(d gossip.SamplingDecision) {
 	if found {
 		p.log("Found trace %s in buffer, exporting", d.TraceID)
 		log.Printf("Sampling trace %s (Reason: %s)", d.TraceID, d.Reason)
+		if p.telemetry != nil {
+			p.telemetry.TracesSampled.Add(context.Background(), 1)
+		}
 		p.addProcessingLabelToTraces(trace.Traces)
 		if err := p.exporter.ExportTrace(trace); err != nil {
 			log.Printf("Failed to export trace %s: %v", d.TraceID, err)
@@ -228,6 +234,9 @@ func (p *Processor) performRollup() {
 	// 3. Process Metrics
 	if len(allMetrics) > 0 {
 		p.log("Rolling up %d metrics (Buffer: %d, Evicted: %d)", len(allMetrics), len(bufferMetrics), len(allMetrics)-len(bufferMetrics))
+		if p.telemetry != nil {
+			p.telemetry.RollupsTotal.Add(context.Background(), int64(len(allMetrics)))
+		}
 		rolled := p.rollup.RollupMetrics(allMetrics)
 		p.addProcessingLabelToMetrics(rolled)
 		p.exporter.ExportMetrics(rolled)
@@ -237,6 +246,9 @@ func (p *Processor) performRollup() {
 	// 4. Process Logs
 	if len(allLogs) > 0 {
 		p.log("Rolling up %d logs (Buffer: %d, Evicted: %d)", len(allLogs), len(bufferLogs), len(allLogs)-len(bufferLogs))
+		if p.telemetry != nil {
+			p.telemetry.RollupsTotal.Add(context.Background(), int64(len(allLogs)))
+		}
 		rolled := p.rollup.RollupLogs(allLogs)
 		p.addProcessingLabelToLogs(rolled)
 		p.exporter.ExportLogs(rolled)

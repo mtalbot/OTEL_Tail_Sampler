@@ -16,6 +16,11 @@ data:
       max_traces: {{ .Values.config.buffer.max_traces }}
     discovery:
       type: {{ .Values.config.discovery.type | quote }}
+      {{- if .Values.config.discovery.service_name }}
+      service_name: {{ .Values.config.discovery.service_name | quote }}
+      {{- else }}
+      service_name: {{ printf "%s-headless" (include "otel-tail-sampler.fullname" .) | quote }}
+      {{- end }}
       peers: {{ .Values.config.discovery.peers | toJson }}
     gossip:
       port: {{ .Values.config.gossip.port }}
