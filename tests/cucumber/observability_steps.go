@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -25,7 +26,7 @@ type testContext struct {
 	t                *testing.T
 	receiver         *receiver.Receiver
 	processor        *processor.Processor
-	exporter         *exporter.Exporter
+	exporter         *exporter.OTLPExporter
 	decisionEngine   *decision.Engine
 	traceData        ptrace.Traces
 	serverAddr       string
@@ -44,12 +45,12 @@ func (tc *testContext) givenMultiSpanTraceWithSpans(count int) {
 	for i := 0; i < count; i++ {
 		span := scopeSpan.Spans().AppendEmpty()
 		span.SetName(fmt.Sprintf("span-%d", i))
-		span.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-		span.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8 + byte(i)}))
+		span.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+		span.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8 + byte(i)})
 		span.SetKind(ptrace.SpanKindServer)
 		span.Status().SetCode(ptrace.StatusCodeOk)
-		span.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-		span.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Millisecond*100)))
+		span.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+		span.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Millisecond * 100)))
 	}
 	
 	tc.traceData = trace
@@ -67,23 +68,23 @@ func (tc *testContext) givenMultiSpanTraceWithFailedSpan() {
 	for i := 0; i < 2; i++ {
 		span := scopeSpan.Spans().AppendEmpty()
 		span.SetName(fmt.Sprintf("successful-span-%d", i))
-		span.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-		span.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8 + byte(i)}))
+		span.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+		span.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8 + byte(i)})
 		span.SetKind(ptrace.SpanKindServer)
 		span.Status().SetCode(ptrace.StatusCodeOk)
-		span.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-		span.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Millisecond*100)))
+		span.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+		span.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Millisecond * 100)))
 	}
 	
 	// Add failed span
 	failedSpan := scopeSpan.Spans().AppendEmpty()
 	failedSpan.SetName("failed-span")
-	failedSpan.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-	failedSpan.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 10}))
+	failedSpan.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+	failedSpan.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 10})
 	failedSpan.SetKind(ptrace.SpanKindServer)
 	failedSpan.Status().SetCode(ptrace.StatusCodeError)
-	failedSpan.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-	failedSpan.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Millisecond*100)))
+	failedSpan.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	failedSpan.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Millisecond * 100)))
 	
 	tc.traceData = trace
 }
@@ -100,23 +101,23 @@ func (tc *testContext) givenMultiSpanTraceWithSlowSpan() {
 	for i := 0; i < 2; i++ {
 		span := scopeSpan.Spans().AppendEmpty()
 		span.SetName(fmt.Sprintf("successful-span-%d", i))
-		span.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-		span.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8 + byte(i)}))
+		span.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+		span.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8 + byte(i)})
 		span.SetKind(ptrace.SpanKindServer)
 		span.Status().SetCode(ptrace.StatusCodeOk)
-		span.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-		span.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Millisecond*100)))
+		span.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+		span.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Millisecond * 100)))
 	}
 	
 	// Add slow span
 	slowSpan := scopeSpan.Spans().AppendEmpty()
 	slowSpan.SetName("slow-span")
-	slowSpan.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-	slowSpan.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 10}))
+	slowSpan.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+	slowSpan.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 10})
 	slowSpan.SetKind(ptrace.SpanKindServer)
 	slowSpan.Status().SetCode(ptrace.StatusCodeOk)
-	slowSpan.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-	slowSpan.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Second*5))) // 5 seconds
+	slowSpan.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	slowSpan.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Second * 5))) // 5 seconds
 	
 	tc.traceData = trace
 }
@@ -132,32 +133,32 @@ func (tc *testContext) givenMultiSpanTraceWithMixedSpans() {
 	// Add successful span
 	span1 := scopeSpan.Spans().AppendEmpty()
 	span1.SetName("successful-span-1")
-	span1.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-	span1.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
+	span1.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+	span1.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8})
 	span1.SetKind(ptrace.SpanKindServer)
 	span1.Status().SetCode(ptrace.StatusCodeOk)
-	span1.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-	span1.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Millisecond*100)))
+	span1.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	span1.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Millisecond * 100)))
 	
 	// Add failed span
 	span2 := scopeSpan.Spans().AppendEmpty()
 	span2.SetName("failed-span")
-	span2.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-	span2.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 9}))
+	span2.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+	span2.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 9})
 	span2.SetKind(ptrace.SpanKindServer)
 	span2.Status().SetCode(ptrace.StatusCodeError)
-	span2.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-	span2.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Millisecond*100)))
+	span2.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	span2.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Millisecond * 100)))
 	
 	// Add another successful span
 	span3 := scopeSpan.Spans().AppendEmpty()
 	span3.SetName("successful-span-2")
-	span3.SetTraceID(ptrace.TraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}))
-	span3.SetSpanID(ptrace.SpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 10}))
+	span3.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+	span3.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 10})
 	span3.SetKind(ptrace.SpanKindServer)
 	span3.Status().SetCode(ptrace.StatusCodeOk)
-	span3.SetStartTimestamp(ptrace.Timestamp(time.Now().UnixNano()))
-	span3.SetEndTimestamp(ptrace.Timestamp(time.Now().UnixNano() + int64(time.Millisecond*150)))
+	span3.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	span3.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(time.Millisecond * 150)))
 	
 	tc.traceData = trace
 }
@@ -260,7 +261,7 @@ func (tc *testContext) thenSlowSpanShouldTriggerLatencyBasedSampling() {
 	for i := 0; i < spans.Len(); i++ {
 		span := spans.At(i)
 		duration := span.EndTimestamp() - span.StartTimestamp()
-		if duration > ptrace.Timestamp(time.Second*4) { // More than 4 seconds
+		if duration > pcommon.NewTimestampFromTime(time.Second * 4).AsTime().UnixNano() { // More than 4 seconds
 			hasLongDuration = true
 			break
 		}
