@@ -1,4 +1,4 @@
-replicaCount: 1
+replicaCount: 3
 
 image:
   repository: otel-sampler
@@ -19,7 +19,8 @@ config:
     ttl_seconds: 30
     max_traces: 5000
   discovery:
-    type: "static"
+    type: "dns"
+    # service_name: "" # Removed to trigger default
     peers: []
   gossip:
     port: 7946
