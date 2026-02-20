@@ -11,12 +11,12 @@ func TestFeatures(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
+	// Simple approach - just run Godog without specifying paths
 	status := godog.TestSuite{
 		Name:                "observability",
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
 			Format:   "pretty",
-			Paths:    []string{"tests/cucumber"},
 			TestingT: t, // Testing instance
 		},
 	}.Run()
