@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/cucumber/godog"
-	"github.com/cucumber/godog/colors"
 )
 
 func TestFeatures(t *testing.T) {
@@ -13,7 +12,7 @@ func TestFeatures(t *testing.T) {
 	}
 
 	status := godog.TestSuite{
-		Name: "observability",
+		Name:                "observability",
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
 			Format:   "pretty",
